@@ -8,7 +8,7 @@ from .serializers import GameSerializer
 class GameViewSet(viewsets.ReadOnlyModelViewSet):
     """Public read-only game catalog."""
 
-    queryset = Game.objects.select_related("developer").all()
+    queryset = Game.objects.select_related("developer").prefetch_related("genres")
     serializer_class = GameSerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"

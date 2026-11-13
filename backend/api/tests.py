@@ -2,18 +2,20 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Developer, Game
+from .models import Developer, Game, Genre
 
 
 class GameCatalogTests(APITestCase):
     def setUp(self):
         self.developer = Developer.objects.create(name="CD Projekt Red")
+        self.rpg = Genre.objects.create(name="RPG")
         self.game = Game.objects.create(
             title="The Witcher 3: Wild Hunt",
             release_year=2015,
             developer=self.developer,
             description="RPG",
         )
+        self.game.genres.add(self.rpg)
 
     def test_catalog_is_public_and_paginated(self):
         response = self.client.get(reverse("game-list"))
@@ -26,6 +28,10 @@ class GameCatalogTests(APITestCase):
         self.assertEqual(item["title"], "The Witcher 3: Wild Hunt")
         self.assertEqual(item["release_year"], 2015)
         self.assertEqual(item["developer"]["name"], "CD Projekt Red")
+        self.assertEqual(
+            item["genres"],
+            [{"id": self.rpg.id, "name": "RPG", "slug": "rpg"}],
+        )
 
     def test_game_detail_by_slug(self):
         response = self.client.get(

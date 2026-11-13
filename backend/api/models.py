@@ -35,6 +35,24 @@ class Developer(models.Model):
         super().save(*args, **kwargs)
 
 
+class Genre(models.Model):
+    name = models.CharField("название", max_length=100, unique=True)
+    slug = models.SlugField("slug", max_length=100, unique=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "жанр"
+        verbose_name_plural = "жанры"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = unique_slug(Genre, self.name, self.pk)
+        super().save(*args, **kwargs)
+
+
 class Game(models.Model):
     title = models.CharField("название", max_length=255)
     slug = models.SlugField("slug", max_length=255, unique=True, blank=True)
@@ -48,6 +66,12 @@ class Game(models.Model):
         verbose_name="студия разработки",
         related_name="games",
         on_delete=models.PROTECT,
+    )
+    genres = models.ManyToManyField(
+        Genre,
+        verbose_name="жанры",
+        related_name="games",
+        blank=True,
     )
     description = models.TextField("описание", blank=True)
     cover = models.ImageField("обложка", upload_to="games/covers/", blank=True)
