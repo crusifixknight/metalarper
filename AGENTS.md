@@ -48,7 +48,7 @@
 
 | Часть | Технологии |
 | --- | --- |
-| Backend | Django 6.1.3, DRF 3.18.3, SQLite (`backend/db.sqlite3`), Pillow, python-dotenv |
+| Backend | Django 6.1.3, DRF 3.18.3, django-filter, SQLite (`backend/db.sqlite3`), Pillow, python-dotenv |
 | Frontend | Next.js 16.4.6, React 19.3, TypeScript 5 (strict), Tailwind CSS 4.3, ESLint 9 |
 | Python | проект использует `.venv/` в корне репозитория |
 
@@ -94,7 +94,9 @@ cd frontend; npm run build
 ```
 
 Автотесты есть только на бэкенде (`backend/api/tests.py`): публичность и
-пагинация списка, деталь по slug, генерация уникальных slug. Тестов фронтенда нет.
+пагинация списка, деталь по slug, генерация уникальных slug, фильтры по
+жанрам/студии/диапазону лет/поиску и справочники `/api/genres/`,
+`/api/developers/`. Тестов фронтенда нет.
 
 ## Карта кода
 
@@ -106,20 +108,23 @@ cd frontend; npm run build
 | `backend/backend/urls.py` | `/admin/`, `/api/`; медиа раздаётся только при `DEBUG` |
 | `backend/api/models.py` | `Developer`, `Genre`, `Game` + `unique_slug()` |
 | `backend/api/serializers.py` | вложенные `developer` и `genres`, плоский `cover` |
-| `backend/api/views.py` | `GameViewSet` — `ReadOnlyModelViewSet`, `lookup_field = "slug"` |
-| `backend/api/urls.py` | DRF `DefaultRouter`, basename `game` |
+| `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
+| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"` |
+| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers` |
 | `backend/api/admin.py` | регистрация всех трёх моделей |
 
 ### Frontend
 
 | Файл | Назначение |
 | --- | --- |
-| `frontend/lib/api.ts` | типы, `ApiError`, `API_URL`, `getGames`, `getGame`, парсинг пагинации, `resolveCoverUrl` |
-| `frontend/app/page.tsx` | статический каркас каталога; список стримится в `<Suspense>` |
-| `frontend/components/CatalogResults.tsx` | загрузка страницы, пагинация, состояния «пусто» / «нет страницы» / «API недоступен» |
+| `frontend/lib/api.ts` | типы, `ApiError`, `API_URL`, `getGames`, `getCatalogGames`, `getGame`, `getFacets`, разбор фильтров, сортировка, пагинация, `resolveCoverUrl` |
+| `frontend/app/page.tsx` | статический каркас каталога: заголовок «Каталог игр» + строка поиска справа; результаты, поиск и сайдбар стримятся в отдельных `<Suspense>` |
+| `frontend/components/CatalogFilters.tsx` | серверная часть фильтров: `searchParams` + справочники жанров/студий |
+| `frontend/components/FilterSidebar.tsx` | GET-форма фильтров (`genres`, `year_from`/`year_to`, `developer`, `sort`), `FILTER_FORM_ID` для строки поиска и скелетон |
+| `frontend/components/CatalogSearch.tsx` | строка поиска в шапке: поле и кнопка-лупа привязаны к форме фильтров (`form={FILTER_FORM_ID}`), плюс скелетон |
+| `frontend/components/CatalogResults.tsx` | запрос с фильтрами, сортировка, пагинация, состояния «пусто» / «нет страницы» / «некорректный фильтр» / «API недоступен» |
 | `frontend/components/GameCard.tsx` | карточка игры (`next/image`, жанры, год, студия) |
-| `frontend/components/CatalogSkeleton.tsx` | скелетон каталога на 12 карточек (равно `PAGE_SIZE`) |
-| `frontend/components/FilterSidebar.tsx` | сайдбар фильтров, намеренно отключён (`<fieldset disabled>`) |
+| `frontend/components/CatalogSkeleton.tsx` | скелетон каталога на `CATALOG_PAGE_SIZE` карточек |
 | `frontend/app/games/[slug]/page.tsx` | детальная страница, `ApiError(404)` → `notFound()` |
 | `frontend/app/error.tsx` | клиентский error boundary |
 | `frontend/app/not-found.tsx` | страница 404 |
@@ -130,17 +135,30 @@ cd frontend; npm run build
 ```
 GET /api/games/?page=N   -> { count, next, previous, results: [Game] }
 GET /api/games/<slug>/   -> Game
+GET /api/genres/         -> { count, next, previous, results: [Genre] }
+GET /api/developers/     -> { count, next, previous, results: [Developer] }
+```
+
+Фильтры списка игр (`django-filter`, `backend/api/filters.py`):
+
+```
+GET /api/games/?genres=rpg&genres=action&developer=fromsoftware
+                &year_from=2015&year_to=2020&search=witcher&page=1
 ```
 
 `Game`: `id, title, slug, release_year, developer {id,name,slug},
 genres [{id,name,slug}], description, cover (абсолютный или относительный URL)`.
+`Genre` и `Developer`: `id, name, slug`.
 
-- Пагинация — DRF `PageNumberPagination`, `PAGE_SIZE = 12`.
-- Ссылка на первую страницу не содержит `?page=1` — это учтено в `pageFromUrl`.
-- Других эндпоинтов нет: списков студий/жанров, фильтрации и сортировки API не
-  поддерживает, поэтому фильтры в сайдбаре отключены. Если добавляете фильтры —
-  сначала расширьте бэкенд (`filterset_fields` / query params), затем UI.
-- Запросы идут `cache: "no-store"`, каталог всегда показывает свежие данные.
+- Пагинация — DRF `PageNumberPagination`, `PAGE_SIZE = 12`; ссылка на первую
+  страницу не содержит `?page=1`.
+- Логика фильтров: между группами — «И», внутри `genres`/`developer` — «ИЛИ».
+  Неизвестный slug или нечисловой год → `400`.
+- Параметра `ordering` нет: игры по умолчанию отсортированы по `title`.
+  Сортировку по году фронтенд делает сам — догружает все страницы уже
+  отфильтрованного результата (`getCatalogGames`) и нарезает их по 12.
+- Запросы идут `cache: "no-store"`, каталог всегда показывает свежие данные;
+  готовые ответы кэшируются в памяти процесса на 60 секунд.
 
 ## Модель данных и правила
 
@@ -163,7 +181,16 @@ genres [{id,name,slug}], description, cover (абсолютный или отн�
 - Данные из API — только через функции из `lib/api.ts`. При изменении
   сериализаторов обновите типы там же, чтобы TS-контракт не разъезжался.
 - `params` и `searchParams` в Next 16 — это `Promise`, их нужно `await`
-  (см. `CatalogResults` и `GameDetails`).
+  (см. `CatalogResults`, `CatalogFilters` и `GameDetails`).
+- Фильтры каталога — обычная GET-форма, состояние живёт в URL:
+  `genres` (можно несколько), `developer`, `year_from`, `year_to`, `search`,
+  `sort`, `page`. Имена первых пяти совпадают с параметрами API; `sort`
+  понимает только фронтенд.
+- Строка поиска живёт вне формы сайдбара и связана с ней атрибутом
+  `form={FILTER_FORM_ID}` (константа в `FilterSidebar.tsx`), поэтому поиск
+  применяется вместе с фильтрами. Неконтролируемые поля сбрасываются через
+  `key`, иначе при мягкой навигации (сброс, «назад») в них остаются старые
+  значения.
 - Ошибки API: `ApiError` с `status` (0 — сеть недоступна, 404 — нет игры/страницы).
 - Стили — Tailwind-утилиты прямо в JSX; тёмная тема через `prefers-color-scheme`
   и `dark:`-классы. Глобальные токены — `app/globals.css`.
@@ -196,5 +223,6 @@ genres [{id,name,slug}], description, cover (абсолютный или отн�
 - Домены обложек ограничены `remotePatterns` (`/media/**`) и
   `dangerouslyAllowLocalIP` для локальных адресов: если обложки начнут
   отдаваться с другого хоста/пути, правьте `next.config.ts`.
-- `PAGE_SIZE` (12) и `CARD_COUNT` в `CatalogSkeleton` (12) связаны вручную:
-  при изменении размера страницы обновите оба места.
+- `PAGE_SIZE` (12) в настройках DRF и `CATALOG_PAGE_SIZE` в
+  `frontend/lib/api.ts` связаны вручную: при изменении размера страницы
+  обновите оба места (скелетон каталога берёт константу из `lib/api.ts`).
