@@ -50,8 +50,6 @@ class GameCatalogTests(APITestCase):
 
         self.assertEqual(self.game.slug, "the-witcher-3-wild-hunt")
         self.assertEqual(second.slug, "the-witcher-3-wild-hunt-2")
-<<<<<<< HEAD
-=======
 
 
 class GameFilterTests(APITestCase):
@@ -158,4 +156,3 @@ class GameFilterTests(APITestCase):
         response = self.client.get(reverse("developer-list"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
->>>>>>> 545b656d9046f3b8c7538e94b1f2028bded6aef8

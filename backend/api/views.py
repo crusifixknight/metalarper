@@ -1,19 +1,3 @@
-<<<<<<< HEAD
-from rest_framework import viewsets
-from rest_framework.permissions import AllowAny
-
-from .models import Game
-from .serializers import GameSerializer
-
-
-class GameViewSet(viewsets.ReadOnlyModelViewSet):
-    """Public read-only game catalog."""
-
-    queryset = Game.objects.select_related("developer").prefetch_related("genres")
-    serializer_class = GameSerializer
-    permission_classes = [AllowAny]
-    lookup_field = "slug"
-=======
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
@@ -57,4 +41,3 @@ class DeveloperViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DeveloperSerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"
->>>>>>> 545b656d9046f3b8c7538e94b1f2028bded6aef8
