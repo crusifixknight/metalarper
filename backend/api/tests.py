@@ -1,8 +1,12 @@
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .models import Developer, Game, Genre
+
+User = get_user_model()
 
 
 class GameCatalogTests(APITestCase):
@@ -156,3 +160,92 @@ class GameFilterTests(APITestCase):
         response = self.client.get(reverse("developer-list"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
+
+
+class RegistrationTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("auth-register")
+        self.payload = {
+            "username": "player",
+            "email": "player@example.com",
+            "password": "Str0ng-Passw0rd!",
+            "password_confirm": "Str0ng-Passw0rd!",
+        }
+
+    def test_registration_returns_user_and_valid_tokens(self):
+        response = self.client.post(self.url, self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["user"]["username"], "player")
+        self.assertEqual(response.data["user"]["email"], "player@example.com")
+        self.assertNotIn("password", response.data["user"])
+        self.assertNotIn("password_confirm", response.data["user"])
+
+        user = User.objects.get(username="player")
+        self.assertTrue(user.check_password(self.payload["password"]))
+        self.assertNotEqual(user.password, self.payload["password"])
+
+        self.assertEqual(int(AccessToken(response.data["access"])["user_id"]), user.id)
+        self.assertEqual(int(RefreshToken(response.data["refresh"])["user_id"]), user.id)
+
+    def test_duplicate_username_is_rejected_case_insensitively(self):
+        User.objects.create_user(
+            username="player",
+            email="first@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        payload = {
+            **self.payload,
+            "username": "Player",
+            "email": "second@example.com",
+        }
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+
+    def test_duplicate_email_is_rejected_case_insensitively(self):
+        User.objects.create_user(
+            username="someone",
+            email="player@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        payload = {**self.payload, "email": "PLAYER@example.com"}
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+
+    def test_password_mismatch_is_rejected(self):
+        payload = {**self.payload, "password_confirm": "Different-Passw0rd!"}
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password_confirm", response.data)
+        self.assertFalse(User.objects.filter(username="player").exists())
+
+    def test_weak_password_is_rejected(self):
+        payload = {
+            **self.payload,
+            "password": "12345678",
+            "password_confirm": "12345678",
+        }
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertFalse(User.objects.filter(username="player").exists())
+
+    def test_missing_fields_are_rejected(self):
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            set(response.data),
+            {"username", "email", "password", "password_confirm"},
+        )
+        self.assertFalse(User.objects.exists())
