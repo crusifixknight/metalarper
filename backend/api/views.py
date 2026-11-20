@@ -10,10 +10,10 @@ from .serializers import DeveloperSerializer, GameSerializer, GenreSerializer
 
 
 class GameViewSet(viewsets.ReadOnlyModelViewSet):
-    """Публичный read-only каталог игр с фильтрацией.
+    """Public read-only game catalog with filtering.
 
-    Steam-данные отдаются из кэша, а устаревшие снимки обновляются в фоне,
-    чтобы ответ не зависел от скорости внешнего сервиса.
+    Steam data is served from the cache; stale snapshots are refreshed in the
+    background so responses do not depend on the external service's speed.
     """
 
     serializer_class = GameSerializer
@@ -36,7 +36,7 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
         return context
 
     def _prepare(self, games):
-        """Ставит устаревшие Steam-снимки в фон и считает рекомендации."""
+        """Queue stale Steam snapshots for refresh and compute recommendations."""
         games = list(games)
         services.ensure_snapshots_async(games)
         self._recommendations = services.recommendations_for(games)
@@ -62,7 +62,7 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class GenreViewSet(viewsets.ReadOnlyModelViewSet):
-    """Справочник жанров для фильтров."""
+    """Genre directory used by the filters."""
 
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
@@ -71,7 +71,7 @@ class GenreViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class DeveloperViewSet(viewsets.ReadOnlyModelViewSet):
-    """Справочник студий для фильтров."""
+    """Developer directory used by the filters."""
 
     queryset = Developer.objects.all()
     serializer_class = DeveloperSerializer

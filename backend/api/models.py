@@ -113,11 +113,11 @@ class Game(models.Model):
 
 
 class SteamSnapshot(models.Model):
-    """Кэш внешних данных Steam для карточки игры.
+    """Cache of external Steam data for a game card.
 
-    Значения обновляются фоновыми запросами к публичным эндпоинтам Steam
-    (игроки, обзоры, новости). Пока данные свежие, API отдаёт их из этой
-    таблицы и не ходит во внешние сервисы.
+    Values are refreshed by background requests to public Steam endpoints
+    (players, reviews, news). While the data is fresh, the API serves it from
+    this table and does not call external services.
     """
 
     game = models.OneToOneField(

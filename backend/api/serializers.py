@@ -17,7 +17,7 @@ class GenreSerializer(serializers.ModelSerializer):
 
 
 class GameBriefSerializer(serializers.ModelSerializer):
-    """Короткая карточка для связанных и рекомендованных игр."""
+    """Short card used for related and recommended games."""
 
     class Meta:
         model = Game
@@ -49,7 +49,7 @@ class GameSerializer(serializers.ModelSerializer):
         )
 
     def get_steam(self, obj: Game):
-        """Данные Steam из кэша; пока снимка нет — null-поля и is_stale=true."""
+        """Steam data from the cache; without a snapshot - nulls and is_stale=true."""
         appid = obj.steam_appid
         if not appid:
             return None

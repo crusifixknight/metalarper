@@ -1,8 +1,8 @@
-"""Клиент публичных эндпоинтов Steam (без API-ключа).
+"""Client for public Steam endpoints (no API key required).
 
-Каждая функция возвращает словарь с полями модели ``SteamSnapshot`` либо
-``None``, если запрос не удался. Исключения наружу не пробрасываются:
-недоступность внешнего сервиса не должна ломать каталог.
+Every fetch function returns a dict of ``SteamSnapshot`` fields or ``None``
+when the request failed. Exceptions never propagate: an unavailable external
+service must not break the catalog.
 """
 
 import json
@@ -21,7 +21,7 @@ STEAM_STORE = "https://store.steampowered.com"
 
 
 def stars_from_reviews(positive: int, negative: int) -> float | None:
-    """Переводит доли положительных/отрицательных обзоров в 0–5 звёзд."""
+    """Convert positive/negative review counts into a 0-5 star rating."""
     total = positive + negative
     if total <= 0:
         return None
@@ -29,14 +29,14 @@ def stars_from_reviews(positive: int, negative: int) -> float | None:
 
 
 def stars_from_percent(percent: int) -> float | None:
-    """Переводит процент положительных обзоров в рейтинг 0–5 звёзд."""
+    """Convert the share of positive reviews into a 0-5 star rating."""
     if percent < 0 or percent > 100:
         return None
     return round(5 * percent / 100, 1)
 
 
 def _get_json(url: str):
-    """GET-запрос с таймаутом; возвращает разобранный JSON."""
+    """GET request with a timeout; returns parsed JSON."""
     request = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
@@ -46,7 +46,7 @@ def _get_json(url: str):
 
 
 def fetch_current_players(appid: int) -> dict | None:
-    """Сколько человек играют прямо сейчас (публичный эндпоинт, ключ не нужен)."""
+    """How many people are playing right now (public endpoint, no key)."""
     url = (
         f"{STEAM_API}/ISteamUserStats/GetNumberOfCurrentPlayers/v1/"
         f"?appid={appid}"
@@ -58,16 +58,16 @@ def fetch_current_players(appid: int) -> dict | None:
         if response.get("result") != 1 or count is None:
             return None
         return {"current_players": int(count)}
-    except Exception as exc:  # noqa: BLE001 — внешний сервис, любая ошибка = нет данных
+    except Exception as exc:  # noqa: BLE001 - external service, any error = no data
         logger.warning("Steam players fetch failed for appid=%s: %s", appid, exc)
         return None
 
 
 def _rating_from_store_browse(appid: int) -> dict | None:
-    """Сводка обзоров через IStoreBrowseService (публичный, без ключа).
+    """Review summary via IStoreBrowseService (public, no key).
 
-    Возвращает глобальную сводку Steam: количество обзоров и процент
-    положительных. Для недоступной игры/сервиса — None.
+    Returns Steam's global summary: review count and the percentage of
+    positive reviews. Returns None for an unavailable game or service.
     """
     payload = {
         "ids": [{"appid": appid}],
@@ -103,7 +103,7 @@ def _rating_from_store_browse(appid: int) -> dict | None:
 
 
 def _rating_from_appreviews(appid: int) -> dict | None:
-    """Запасной источник: классический эндпоинт обзоров магазина."""
+    """Fallback source: the classic store reviews endpoint."""
     url = (
         f"{STEAM_STORE}/appreviews/{appid}"
         "?json=1&language=all&purchase_type=all&num_per_page=0"
@@ -127,15 +127,15 @@ def _rating_from_appreviews(appid: int) -> dict | None:
 
 
 def fetch_rating(appid: int) -> dict | None:
-    """Рейтинг по обзорам Steam: звёзды + количество оценок."""
+    """Steam review rating: stars plus the number of reviews."""
     return _rating_from_store_browse(appid) or _rating_from_appreviews(appid)
 
 
 def fetch_last_updated(appid: int) -> dict | None:
-    """Дата последней новости/патча из Steam News.
+    """Date of the latest news item / patch note from Steam News.
 
-    Steam не отдаёт патч-даты отдельным полем, поэтому дата последнего
-    обновления игры берётся как время самой свежей новости в ленте.
+    Steam does not expose patch dates as a separate field, so the game's last
+    update date is taken from the most recent entry in its news feed.
     """
     url = (
         f"{STEAM_API}/ISteamNews/GetNewsForApp/v2/"

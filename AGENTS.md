@@ -12,7 +12,7 @@ code so you don't waste time figuring out the structure.
 - `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4.
   Data is fetched from the backend **server-side only**.
 
-UI text and code comments are in Russian. Frontend docs — `frontend/README.md`.
+UI text in Russian, code comments - English. Frontend docs — `frontend/README.md`.
 
 ## Mandatory agent workflow
 

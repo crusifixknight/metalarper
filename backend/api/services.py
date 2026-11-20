@@ -1,9 +1,9 @@
-"""Кэш и фоновое обновление внешних данных Steam.
+"""Cache and background refresh for external Steam data.
 
-Стратегия stale-while-revalidate: запрос к каталогу никогда не ждёт Steam.
-Он получает то, что уже лежит в ``SteamSnapshot``, а если снимок устарел,
-обновление запускается в фоновом потоке. Так первая загрузка страницы не
-зависит от скорости и доступности внешних сервисов.
+Stale-while-revalidate: a catalog request never waits for Steam. It gets
+whatever is already stored in ``SteamSnapshot``; if the snapshot is stale,
+a background thread refreshes it. This keeps the first page load independent
+of the speed and availability of external services.
 """
 
 import logging
@@ -20,16 +20,16 @@ from .models import Game, SteamSnapshot
 
 logger = logging.getLogger(__name__)
 
-#: Через сколько снимок считается устаревшим и уходит в фоновое обновление.
+#: How long a snapshot stays fresh before going to background refresh.
 STEAM_TTL = timedelta(minutes=15)
 
-#: Сколько снимков обновляем параллельно в одном фоновом проходе.
+#: How many snapshots one background pass refreshes in parallel.
 MAX_WORKERS = 6
 
-#: Сколько рекомендаций по жанрам отдаём для одной игры.
+#: How many genre-based recommendations to return per game.
 RECOMMENDATIONS_LIMIT = 4
 
-#: appid, которые прямо сейчас обновляются (защита от дублирующих запросов).
+#: appids that are being refreshed right now (dedupe guard).
 _in_flight_lock = threading.Lock()
 _in_flight_appids: set[int] = set()
 
@@ -39,7 +39,7 @@ def store_url(appid: int) -> str:
 
 
 def get_snapshot(game: Game) -> SteamSnapshot | None:
-    """Снимок игры без лишнего запроса при отсутствии строки."""
+    """Return the game's snapshot without an extra query when absent."""
     try:
         return game.steam_snapshot
     except ObjectDoesNotExist:
@@ -70,10 +70,10 @@ def _release(appid: int) -> None:
 
 
 def ensure_snapshots_async(games) -> None:
-    """Запускает фоновое обновление устаревших снимков и сразу возвращает управление.
+    """Start a background refresh of stale snapshots and return immediately.
 
-    Пока фон работает, API отдаёт предыдущие данные (даже если они старые);
-    признак ``is_stale`` в ответе сообщает клиенту, что данные обновляются.
+    While the refresh runs, the API serves the previous data (even if old);
+    the ``is_stale`` flag in the response tells the client it is updating.
     """
     appids = []
     for game in games:
@@ -91,14 +91,14 @@ def ensure_snapshots_async(games) -> None:
     )
     try:
         thread.start()
-    except Exception:  # noqa: BLE001 — не оставляем appid «занятыми» навсегда
-        logger.exception("Не удалось запустить фоновое обновление Steam")
+    except Exception:  # noqa: BLE001 - never leave appids claimed forever
+        logger.exception("Failed to start the background Steam refresh")
         for appid in appids:
             _release(appid)
 
 
 def _refresh_worker(appid: int) -> None:
-    """Обновляет снимок в потоке пула и закрывает соединение этого потока."""
+    """Refresh a snapshot in a pool thread and close that thread's connection."""
     try:
         refresh_appid(appid)
     finally:
@@ -113,7 +113,7 @@ def _refresh_appids(appids: list[int]) -> None:
 
 
 def _fetch_payload(appid: int) -> dict | None:
-    """Собирает ответы Steam; любые частичные успехи объединяются."""
+    """Collect Steam responses; any partial successes are merged."""
     payload: dict = {}
     succeeded = False
 
@@ -131,10 +131,10 @@ def _fetch_payload(appid: int) -> dict | None:
 
 
 def refresh_appid(appid: int) -> None:
-    """Обновляет снимок одного appid. Сетевые ошибки только логируются.
+    """Refresh one appid's snapshot. Network errors are only logged.
 
-    Если все внешние запросы упали, снимок не сохраняется — старое значение
-    ``refreshed_at`` останется, и данные продолжат считаться устаревшими.
+    If every external request failed, the snapshot is not saved: the old
+    ``refreshed_at`` stays, so the data keeps being treated as stale.
     """
     try:
         payload = _fetch_payload(appid)
@@ -148,16 +148,16 @@ def refresh_appid(appid: int) -> None:
         snapshot, _ = SteamSnapshot.objects.get_or_create(game=game)
         for field, value in payload.items():
             setattr(snapshot, field, value)
-        # refreshed_at обновляется автоматически (auto_now).
+        # refreshed_at is updated automatically (auto_now).
         snapshot.save()
-    except Exception:  # noqa: BLE001 — фон не должен ронять процесс
-        logger.exception("Не удалось обновить Steam-данные для appid=%s", appid)
+    except Exception:  # noqa: BLE001 - a background task must not kill the process
+        logger.exception("Failed to refresh Steam data for appid=%s", appid)
     finally:
         _release(appid)
 
 
 def refresh_games_sync(games) -> None:
-    """Синхронное обновление (для management-команды и прогрева кэша)."""
+    """Synchronous refresh (for the management command and cache pre-warming)."""
     appids = [game.steam_appid for game in games if game.steam_appid]
     if not appids:
         return
@@ -171,10 +171,11 @@ def refresh_games_sync(games) -> None:
 def recommendations_for(
     games, limit: int = RECOMMENDATIONS_LIMIT
 ) -> dict[int, list[Game]]:
-    """Рекомендации по жанрам для набора игр (обычно — страницы каталога).
+    """Genre-based recommendations for a set of games (usually a catalog page).
 
-    Возвращает ``{game_id: [Game, ...]}``. Считается одним запросом на всю
-    страницу: кандидаты вычитываются целиком, пересечение жанров — в Python.
+    Returns ``{game_id: [Game, ...]}``. Computed with one query for the whole
+    page: candidates are fetched at once and genre intersections are done in
+    Python.
     """
     games = list(games)
     if not games:
@@ -210,7 +211,7 @@ def recommendations_for(
             for candidate_id, (candidate, candidate_genres) in candidates.items()
             if candidate_id != game.id and own & candidate_genres
         ]
-        # Сначала больше общих жанров, затем по названию — стабильный порядок.
+        # More shared genres first, then by title - a stable order.
         scored.sort(key=lambda item: (-item[0], item[1]))
         result[game.id] = [item[2] for item in scored[:limit]]
 

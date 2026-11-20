@@ -188,7 +188,7 @@ class SteamDataTests(APITestCase):
         self.game.genres.add(self.rpg)
 
     def tearDown(self):
-        # �� ��������� �������� appid ����� �������.
+        # Do not leave claimed appids behind between tests.
         with services._in_flight_lock:
             services._in_flight_appids.clear()
 

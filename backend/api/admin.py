@@ -43,7 +43,7 @@ class GameAdmin(admin.ModelAdmin):
 
 @admin.register(SteamSnapshot)
 class SteamSnapshotAdmin(admin.ModelAdmin):
-    """Кэш только для чтения: данные заполняются фоновыми запросами."""
+    """Read-only cache: populated by background requests."""
 
     list_display = (
         "game",
