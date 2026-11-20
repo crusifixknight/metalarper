@@ -74,8 +74,29 @@ class Game(models.Model):
         blank=True,
     )
     description = models.TextField("описание", blank=True)
+    age_rating = models.CharField(
+        "возрастной рейтинг",
+        max_length=32,
+        blank=True,
+        help_text="Например: 18+, PEGI 16, ESRB M.",
+    )
     cover = models.ImageField("обложка", upload_to="games/covers/", blank=True)
     created_at = models.DateTimeField("добавлена", auto_now_add=True)
+    steam_appid = models.PositiveIntegerField(
+        "Steam AppID",
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="ID игры в Steam; нужен для игроков, рейтинга и даты обновления.",
+    )
+    related_games = models.ManyToManyField(
+        "self",
+        verbose_name="связанные игры",
+        related_name="related_to",
+        symmetrical=False,
+        blank=True,
+        help_text="Игры той же вселенной или сюжетной линии.",
+    )
 
     class Meta:
         ordering = ["title"]
@@ -89,3 +110,39 @@ class Game(models.Model):
         if not self.slug:
             self.slug = unique_slug(Game, self.title, self.pk)
         super().save(*args, **kwargs)
+
+
+class SteamSnapshot(models.Model):
+    """Cache of external Steam data for a game card.
+
+    Values are refreshed by background requests to public Steam endpoints
+    (players, reviews, news). While the data is fresh, the API serves it from
+    this table and does not call external services.
+    """
+
+    game = models.OneToOneField(
+        Game,
+        verbose_name="игра",
+        related_name="steam_snapshot",
+        on_delete=models.CASCADE,
+    )
+    current_players = models.PositiveIntegerField(
+        "активных игроков", null=True, blank=True
+    )
+    rating_stars = models.DecimalField(
+        "рейтинг, звёзды",
+        max_digits=3,
+        decimal_places=1,
+        null=True,
+        blank=True,
+    )
+    rating_votes = models.PositiveIntegerField("оценок", null=True, blank=True)
+    last_updated = models.DateTimeField("последнее обновление игры", null=True, blank=True)
+    refreshed_at = models.DateTimeField("обновлён", auto_now=True)
+
+    class Meta:
+        verbose_name = "снимок Steam"
+        verbose_name_plural = "снимки Steam"
+
+    def __str__(self):
+        return f"Steam-данные: {self.game.title}"
