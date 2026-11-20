@@ -15,7 +15,7 @@ type CatalogPageProps = {
 
 export default function CatalogPage({ searchParams }: CatalogPageProps) {
   return (
-    <div className="max-w-7xl mx-auto p-4 font-sans text-sm">
+    <div className="w-full max-w-7xl mx-auto p-4 font-sans text-sm">
       {/* Заголовок и поиск */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-bold">Каталог игр</h2>
