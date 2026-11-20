@@ -1,8 +1,9 @@
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 
 from .models import Developer, Game, Genre
 
@@ -61,6 +62,30 @@ class RegisterSerializer(serializers.Serializer):
     def create(self, validated_data):
         validated_data.pop("password_confirm")
         return User.objects.create_user(**validated_data)
+
+
+class LoginSerializer(serializers.Serializer):
+    """Authenticate an existing user by username and password."""
+
+    username = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        user = authenticate(
+            request=self.context.get("request"),
+            username=attrs["username"],
+            password=attrs["password"],
+        )
+        if user is None or not user.is_active:
+            raise AuthenticationFailed(
+                {
+                    "detail": "Invalid username or password.",
+                    "code": "invalid_credentials",
+                }
+            )
+
+        self.user = user
+        return attrs
 
 
 class DeveloperSerializer(serializers.ModelSerializer):
