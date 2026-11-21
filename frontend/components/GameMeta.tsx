@@ -7,6 +7,8 @@ import type { Game } from "@/lib/api";
  * show fewer items instead of empty placeholders.
  */
 export default function GameMeta({ game }: { game: Game }) {
+  const storeUrl = game.steam?.store_url;
+
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-600 dark:text-gray-400">
       {game.age_rating && (
@@ -16,6 +18,19 @@ export default function GameMeta({ game }: { game: Game }) {
         >
           {game.age_rating}
         </span>
+      )}
+
+      {storeUrl && (
+        <a
+          href={storeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Открыть игру в Steam"
+          title="Открыть игру в Steam"
+          className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          Steam ↗
+        </a>
       )}
     </div>
   );

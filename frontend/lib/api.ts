@@ -42,6 +42,16 @@ export type Genre = {
   slug: string;
 };
 
+export type SteamData = {
+  appid: number;
+  store_url: string;
+  current_players: number | null;
+  rating_stars: number | null;
+  rating_votes: number | null;
+  last_updated: string | null;
+  is_stale: boolean;
+};
+
 export type Game = {
   id: number;
   title: string;
@@ -52,6 +62,7 @@ export type Game = {
   description: string;
   age_rating: string;
   cover: string | null;
+  steam: SteamData | null;
 };
 
 export type Paginated<T> = {
