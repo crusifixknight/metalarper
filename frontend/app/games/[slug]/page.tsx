@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import GameMeta from "@/components/GameMeta";
 import { ApiError, getGame, resolveCoverUrl } from "@/lib/api";
 
 type GamePageProps = {
@@ -65,7 +66,10 @@ async function GameDetails({ params }: GamePageProps) {
 
       {/* Информация */}
       <div>
-        <h1 className="mb-3 text-2xl font-bold">{game.title}</h1>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold">{game.title}</h1>
+          <GameMeta game={game} />
+        </div>
 
         <dl className="mb-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-gray-600 dark:text-gray-400">
           <dt>Год выхода</dt>

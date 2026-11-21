@@ -50,6 +50,7 @@ export type Game = {
   developer: Developer;
   genres: Genre[];
   description: string;
+  age_rating: string;
   cover: string | null;
 };
 
