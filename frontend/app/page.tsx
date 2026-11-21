@@ -16,7 +16,7 @@ type CatalogPageProps = {
 export default function CatalogPage({ searchParams }: CatalogPageProps) {
   return (
     <div className="w-full max-w-7xl mx-auto p-4 font-sans text-sm">
-      {/* Заголовок и поиск */}
+      {/* Heading and search */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="text-lg font-bold">Каталог игр</h2>
         <Suspense fallback={<CatalogSearchSkeleton />}>
@@ -24,16 +24,16 @@ export default function CatalogPage({ searchParams }: CatalogPageProps) {
         </Suspense>
       </div>
 
-      {/* Основной макет: сетка слева, фильтры справа */}
+      {/* Main layout: game grid on the left, filters on the right */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Левая часть - сетка игр */}
+        {/* Left side - game grid */}
         <div className="flex-1 min-w-0">
           <Suspense fallback={<CatalogSkeleton />}>
             <CatalogResults searchParams={searchParams} />
           </Suspense>
         </div>
 
-        {/* Правая часть - фильтры */}
+        {/* Right side - filters */}
         <aside className="w-full lg:w-64 flex-shrink-0">
           <Suspense fallback={<FilterSidebarSkeleton />}>
             <CatalogFilters searchParams={searchParams} />

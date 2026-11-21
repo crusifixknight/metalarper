@@ -48,7 +48,7 @@ async function GameDetails({ params }: GamePageProps) {
   return (
     <>
       <article className="grid gap-6 md:grid-cols-[260px_1fr]">
-        {/* Обложка */}
+        {/* Cover */}
         <div className="relative mx-auto aspect-[2/3] w-full max-w-[260px] overflow-hidden rounded bg-gray-200">
           {cover ? (
             <Image
@@ -66,7 +66,7 @@ async function GameDetails({ params }: GamePageProps) {
           )}
         </div>
 
-        {/* Информация */}
+        {/* Information */}
         <div>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-2xl font-bold">{game.title}</h1>

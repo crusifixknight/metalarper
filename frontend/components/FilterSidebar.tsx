@@ -8,7 +8,7 @@ const controlClassName =
 const labelClassName =
   "mb-1 block font-medium text-gray-700 dark:text-gray-200";
 
-/** id формы сайдбара: на него ссылается строка поиска в шапке. */
+/** Sidebar form id: the header search box points to it. */
 export const FILTER_FORM_ID = "catalog-filters";
 
 export type FilterSidebarProps = {
@@ -17,16 +17,16 @@ export type FilterSidebarProps = {
 };
 
 /**
- * Сайдбар фильтров каталога.
+ * Catalog filter sidebar.
  *
- * Это обычная GET-форма: состояние живёт в query-параметрах URL, поэтому
- * фильтры работают без клиентского JavaScript. Параметры (`genres`,
- * `developer`, `year_from`, `year_to`) совпадают с контрактом Django API.
+ * This is a plain GET form: state lives in the URL query string, so filters
+ * work without client-side JavaScript. The parameters (`genres`,
+ * `developer`, `year_from`, `year_to`) match the Django API contract.
  */
 export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
-  // При мягкой навигации (сброс фильтров, кнопка «назад») React переиспользует
-  // неконтролируемые поля и оставляет в них старые значения. key заставляет
-  // форму перемонтироваться, когда фильтры в URL меняются.
+  // On soft navigation (filter reset, back button) React reuses uncontrolled
+  // fields and keeps their old values. The key forces the form to remount
+  // when the filters in the URL change.
   const formKey = JSON.stringify([
     filters.genres,
     filters.developer,
@@ -46,7 +46,7 @@ export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
         </p>
       ) : (
         <form method="get" action="/" id={FILTER_FORM_ID} key={formKey}>
-          {/* Сортировка */}
+          {/* Sorting */}
           <div className="mb-3">
             <label htmlFor="filter-sort" className={labelClassName}>
               Сортировка
@@ -63,7 +63,7 @@ export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
             </select>
           </div>
 
-          {/* Жанры: мультивыбор, совпадение хотя бы по одному */}
+          {/* Genres: multi-select, match at least one */}
           <fieldset className="mb-3">
             <legend className={labelClassName}>Жанры</legend>
             {facets.genres.length === 0 ? (
@@ -89,7 +89,7 @@ export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
             )}
           </fieldset>
 
-          {/* Год выхода: бэкенд принимает диапазон */}
+          {/* Release year: the backend accepts a range */}
           <fieldset className="mb-3">
             <legend className={labelClassName}>Год выхода</legend>
             <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
             </div>
           </fieldset>
 
-          {/* Студия */}
+          {/* Developer */}
           <div className="mb-3">
             <label htmlFor="filter-developer" className={labelClassName}>
               Студия
@@ -159,7 +159,7 @@ export default function FilterSidebar({ filters, facets }: FilterSidebarProps) {
   );
 }
 
-/** Заглушка сайдбара на время загрузки справочников. */
+/** Sidebar placeholder while the directories are loading. */
 export function FilterSidebarSkeleton() {
   return (
     <div

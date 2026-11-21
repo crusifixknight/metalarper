@@ -17,7 +17,7 @@ export default function GameCard({
       href={`/games/${game.slug}`}
       className="group flex flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
     >
-      {/* Обложка */}
+      {/* Cover */}
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-200 mb-2 rounded-sm">
         {cover ? (
           <Image
@@ -35,12 +35,12 @@ export default function GameCard({
         )}
       </div>
 
-      {/* Название */}
+      {/* Title */}
       <h3 className="font-semibold text-blue-600 group-hover:text-blue-800 line-clamp-1 mb-1 dark:text-blue-400 dark:group-hover:text-blue-300">
         {game.title}
       </h3>
 
-      {/* Метаданные: жанры и год */}
+      {/* Metadata: genres and year */}
       <div className="flex justify-between gap-2 text-gray-500 text-xs">
         <span className="line-clamp-1">
           {game.genres.length > 0
@@ -50,7 +50,7 @@ export default function GameCard({
         <span className="shrink-0">{game.release_year}</span>
       </div>
 
-      {/* Студия */}
+      {/* Developer */}
       <div className="mt-0.5 text-gray-400 text-xs line-clamp-1">
         {game.developer.name}
       </div>

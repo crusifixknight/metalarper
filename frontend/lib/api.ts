@@ -1,15 +1,13 @@
 /**
- * Тонкий клиент к Django REST API.
+ * Thin client for the Django REST API.
  *
- * Запросы выполняются только на сервере (Server Components), поэтому
- * переменная API_URL не нуждается в префиксе NEXT_PUBLIC_ и не попадает
- * в браузерный бандл. Это же избавляет от необходимости настраивать CORS
- * на бэкенде.
+ * Requests run on the server only (Server Components), so API_URL does not
+ * need a NEXT_PUBLIC_ prefix and never reaches the browser bundle. This also
+ * removes the need to configure CORS on the backend.
  *
- * Фильтрацию выполняет бэкенд (`GameFilter`): genres, developer,
- * year_from, year_to. Сортировки по году в API нет, поэтому фронтенд
- * догружает все страницы уже отфильтрованного результата и сортирует их
- * самостоятельно.
+ * Filtering is handled by the backend (`GameFilter`): genres, developer,
+ * year_from, year_to. The API has no year sorting, so the frontend loads
+ * every page of the already filtered result and sorts it itself.
  */
 
 import { io } from "next/cache";
@@ -18,16 +16,16 @@ export const API_URL = (
   process.env.API_URL ?? "http://127.0.0.1:8000"
 ).replace(/\/+$/, "");
 
-/** Размер страницы, который задаёт DRF (PAGE_SIZE = 12). */
+/** Page size configured by DRF (PAGE_SIZE = 12). */
 export const CATALOG_PAGE_SIZE = 12;
 
-/** Сколько живёт выгруженный ответ в памяти сервера. */
+/** How long a downloaded response stays in server memory. */
 const CACHE_TTL_MS = 60_000;
 
-/** Предохранитель от бесконечной выгрузки, если каталог сильно вырастет. */
+/** Guard against endless pagination if the catalog grows too large. */
 const MAX_PAGES = 500;
 
-/** Сколько разных наборов фильтров держим в кэше. */
+/** How many distinct filter sets are kept in the cache. */
 const MAX_CACHED_QUERIES = 30;
 
 export type Developer = {
@@ -85,15 +83,15 @@ export type Paginated<T> = {
 export type CatalogSort = "title" | "year-desc" | "year-asc";
 
 export type CatalogFilters = {
-  /** Slug'и жанров; внутри группы действует «ИЛИ». */
+  /** Genre slugs; values within the group are combined with OR. */
   genres: string[];
-  /** Slug студии. */
+  /** Developer slug. */
   developer: string | null;
-  /** Нижняя граница года выпуска. */
+  /** Lower release year bound. */
   yearFrom: number | null;
-  /** Верхняя граница года выпуска. */
+  /** Upper release year bound. */
   yearTo: number | null;
-  /** Поиск по названию; пустая строка — без поиска. */
+  /** Title search; an empty string disables search. */
   search: string;
   sort: CatalogSort;
 };
@@ -130,7 +128,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   try {
     response = await fetch(url, {
       headers: { Accept: "application/json" },
-      // Данные должны быть свежими при каждом обращении к API.
+      // Data must be fresh on every API request.
       cache: "no-store",
     });
   } catch (cause) {
@@ -155,7 +153,7 @@ function request<T>(path: string): Promise<T> {
   return fetchJson<T>(`${API_URL}${path}`);
 }
 
-/** Защита от подмены ссылки пагинации на чужой хост. */
+/** Guards against a pagination link pointing to a foreign host. */
 function sameOriginUrl(url: string): string {
   const target = new URL(url);
   const api = new URL(API_URL);
@@ -168,8 +166,8 @@ function sameOriginUrl(url: string): string {
 }
 
 /**
- * Собирает все страницы списка, переходя по ссылкам next от DRF.
- * Предохранитель MAX_PAGES не даёт выгрузке стать бесконечной.
+ * Collects every page of a list by following DRF's next links.
+ * The MAX_PAGES guard keeps pagination from becoming endless.
  */
 async function collectPages<T>(
   firstPage: Promise<Paginated<T>>,
@@ -199,7 +197,7 @@ async function collectPages<T>(
   return items;
 }
 
-/** Параметры фильтрации в том виде, который понимает бэкенд. */
+/** Filter parameters in the shape the backend expects. */
 function filterParams(filters: CatalogFilters): URLSearchParams {
   const params = new URLSearchParams();
 
@@ -226,7 +224,7 @@ function filterParams(filters: CatalogFilters): URLSearchParams {
   return params;
 }
 
-/** Путь к списку игр с фильтрами и, при необходимости, страницей. */
+/** Path to the game list with filters and an optional page. */
 function gamesPath(filters: CatalogFilters, page = 1): string {
   const params = filterParams(filters);
 
@@ -238,7 +236,7 @@ function gamesPath(filters: CatalogFilters, page = 1): string {
   return `/api/games/${query ? `?${query}` : ""}`;
 }
 
-/** Одна страница каталога, отфильтрованная бэкендом. */
+/** One catalog page filtered by the backend. */
 export function getGames(
   filters: CatalogFilters,
   page = 1,
@@ -267,15 +265,15 @@ function rememberGames(key: string, games: Game[]) {
 }
 
 /**
- * Возвращает весь отфильтрованный каталог.
+ * Returns the whole filtered catalog.
  *
- * Бэкенд умеет фильтровать, но не умеет сортировать по году, поэтому для
- * сортировки нужны все совпадения. Результат кэшируется в памяти процесса
- * на минуту; одновременные запросы делят одно и то же обещание.
+ * The backend can filter but cannot sort by year, so sorting needs every
+ * match. The result is cached in process memory for a minute; concurrent
+ * requests share the same promise.
  */
 export async function getCatalogGames(filters: CatalogFilters): Promise<Game[]> {
-  // Читаем Date.now() для кэша: без io() это значение попало бы в пререндер
-  // и Next.js сообщил бы об «unstable value».
+  // Read Date.now() for the cache: without io() this value would be captured
+  // during prerendering and Next.js would report an "unstable value".
   await io();
 
   const key = gamesPath(filters);
@@ -307,10 +305,10 @@ let facetsCache: { facets: CatalogFacets; expiresAt: number } | null = null;
 let facetsInFlight: Promise<CatalogFacets> | null = null;
 
 /**
- * Справочники для сайдбара: жанры и студии.
+ * Sidebar directories: genres and developers.
  *
- * Оба списка пагинированы DRF, поэтому вычитываются полностью и кэшируются
- * вместе: они меняются редко и небольшие по размеру.
+ * Both lists are paginated by DRF, so they are read completely and cached
+ * together: they change rarely and are small.
  */
 export async function getFacets(): Promise<CatalogFacets> {
   await io();
@@ -348,7 +346,7 @@ function parseYear(value: string | undefined): number | null {
 
 const SORT_VALUES: CatalogSort[] = ["title", "year-desc", "year-asc"];
 
-/** Разбирает searchParams в нормализованный набор фильтров. */
+/** Parses searchParams into a normalized set of filters. */
 export function parseCatalogFilters(
   params: CatalogSearchParams,
 ): CatalogFilters {
@@ -360,7 +358,7 @@ export function parseCatalogFilters(
   let yearFrom = parseYear(firstValue(params.year_from));
   let yearTo = parseYear(firstValue(params.year_to));
 
-  // Если границы перепутаны, меняем их местами, а не отдаём пустой каталог.
+  // If the bounds are swapped, swap them back instead of returning an empty catalog.
   if (yearFrom !== null && yearTo !== null && yearFrom > yearTo) {
     [yearFrom, yearTo] = [yearTo, yearFrom];
   }
@@ -378,7 +376,7 @@ export function parseCatalogFilters(
   };
 }
 
-/** Сортирует игры на фронтенде: в API нет параметра ordering. */
+/** Sorts games on the frontend: the API has no ordering parameter. */
 export function sortGames(games: Game[], sort: CatalogSort): Game[] {
   const sorted = [...games];
 
@@ -402,7 +400,7 @@ export function sortGames(games: Game[], sort: CatalogSort): Game[] {
   return sorted;
 }
 
-/** Нарезает отфильтрованный каталог на страницы. */
+/** Splits the filtered catalog into pages. */
 export function paginateGames(games: Game[], page: number) {
   const totalPages = Math.max(1, Math.ceil(games.length / CATALOG_PAGE_SIZE));
   const start = (page - 1) * CATALOG_PAGE_SIZE;
@@ -415,7 +413,7 @@ export function paginateGames(games: Game[], page: number) {
   };
 }
 
-/** Ссылка на каталог с сохранением фильтров и номера страницы. */
+/** Catalog link that preserves filters and the page number. */
 export function buildCatalogHref(
   filters: CatalogFilters,
   page = 1,
@@ -448,7 +446,7 @@ export function hasCustomSort(filters: CatalogFilters): boolean {
   return filters.sort !== "title";
 }
 
-/** Приводит searchParams.page к безопасному номеру страницы. */
+/** Normalizes searchParams.page to a safe page number. */
 export function parsePageParam(
   value: string | string[] | undefined,
 ): number {
@@ -456,7 +454,7 @@ export function parsePageParam(
   return Number.isFinite(page) && page > 0 ? page : 1;
 }
 
-/** Обложка может прийти абсолютным или относительным URL. */
+/** The cover may arrive as an absolute or relative URL. */
 export function resolveCoverUrl(cover: string | null): string | null {
   if (!cover) {
     return null;
