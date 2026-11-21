@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
@@ -8,9 +9,12 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from . import services, steam
 from .models import Developer, Game, Genre, SteamSnapshot
+
+User = get_user_model()
 
 
 class GameCatalogTests(APITestCase):
@@ -175,6 +179,217 @@ class GameFilterTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
 
+
+class RegistrationTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("auth-register")
+        self.payload = {
+            "username": "player",
+            "email": "player@example.com",
+            "password": "Str0ng-Passw0rd!",
+            "password_confirm": "Str0ng-Passw0rd!",
+        }
+
+    def test_registration_returns_user_and_valid_tokens(self):
+        response = self.client.post(self.url, self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["user"]["username"], "player")
+        self.assertEqual(response.data["user"]["email"], "player@example.com")
+        self.assertNotIn("password", response.data["user"])
+        self.assertNotIn("password_confirm", response.data["user"])
+
+        user = User.objects.get(username="player")
+        self.assertTrue(user.check_password(self.payload["password"]))
+        self.assertNotEqual(user.password, self.payload["password"])
+
+        self.assertEqual(int(AccessToken(response.data["access"])["user_id"]), user.id)
+        self.assertEqual(int(RefreshToken(response.data["refresh"])["user_id"]), user.id)
+
+    def test_duplicate_username_is_rejected_case_insensitively(self):
+        User.objects.create_user(
+            username="player",
+            email="first@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        payload = {
+            **self.payload,
+            "username": "Player",
+            "email": "second@example.com",
+        }
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+
+    def test_duplicate_email_is_rejected_case_insensitively(self):
+        User.objects.create_user(
+            username="someone",
+            email="player@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        payload = {**self.payload, "email": "PLAYER@example.com"}
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+
+    def test_password_mismatch_is_rejected(self):
+        payload = {**self.payload, "password_confirm": "Different-Passw0rd!"}
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password_confirm", response.data)
+        self.assertFalse(User.objects.filter(username="player").exists())
+
+    def test_weak_password_is_rejected(self):
+        payload = {
+            **self.payload,
+            "password": "12345678",
+            "password_confirm": "12345678",
+        }
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertFalse(User.objects.filter(username="player").exists())
+
+    def test_missing_fields_are_rejected(self):
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            set(response.data),
+            {"username", "email", "password", "password_confirm"},
+        )
+        self.assertFalse(User.objects.exists())
+
+
+class LoginTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("auth-login")
+        self.user = User.objects.create_user(
+            username="player",
+            email="player@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        self.payload = {"username": "player", "password": "Str0ng-Passw0rd!"}
+
+    def test_login_returns_user_and_valid_tokens(self):
+        response = self.client.post(self.url, self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["user"]["id"], self.user.id)
+        self.assertEqual(response.data["user"]["username"], "player")
+        self.assertEqual(response.data["user"]["email"], "player@example.com")
+        self.assertNotIn("password", response.data["user"])
+        self.assertEqual(
+            int(AccessToken(response.data["access"])["user_id"]),
+            self.user.id,
+        )
+        self.assertEqual(
+            int(RefreshToken(response.data["refresh"])["user_id"]),
+            self.user.id,
+        )
+
+    def test_wrong_password_returns_401(self):
+        payload = {**self.payload, "password": "Wrong-Passw0rd!"}
+
+        response = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["code"], "invalid_credentials")
+        self.assertEqual(
+            response.data["detail"],
+            "Invalid username or password.",
+        )
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_unknown_user_returns_same_error_as_wrong_password(self):
+        wrong_password = self.client.post(
+            self.url,
+            {**self.payload, "password": "Wrong-Passw0rd!"},
+            format="json",
+        )
+        unknown_user = self.client.post(
+            self.url,
+            {"username": "nobody", "password": "Wrong-Passw0rd!"},
+            format="json",
+        )
+
+        self.assertEqual(unknown_user.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(unknown_user.data, wrong_password.data)
+
+    def test_inactive_user_cannot_login(self):
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        response = self.client.post(self.url, self.payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["code"], "invalid_credentials")
+
+    def test_missing_credentials_returns_400(self):
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(set(response.data), {"username", "password"})
+
+
+class RefreshTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("auth-refresh")
+        self.user = User.objects.create_user(
+            username="player",
+            email="player@example.com",
+            password="Str0ng-Passw0rd!",
+        )
+        self.refresh = RefreshToken.for_user(self.user)
+
+    def test_valid_refresh_returns_new_access_token(self):
+        response = self.client.post(
+            self.url,
+            {"refresh": str(self.refresh)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("refresh", response.data)
+        self.assertEqual(
+            int(AccessToken(response.data["access"])["user_id"]),
+            self.user.id,
+        )
+
+    def test_invalid_refresh_returns_401(self):
+        response = self.client.post(
+            self.url,
+            {"refresh": "not-a-token"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["code"], "token_not_valid")
+
+    def test_access_token_cannot_be_used_as_refresh(self):
+        response = self.client.post(
+            self.url,
+            {"refresh": str(self.refresh.access_token)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["code"], "token_not_valid")
+
+    def test_missing_refresh_returns_400(self):
+        response = self.client.post(self.url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("refresh", response.data)
 class SteamDataTests(APITestCase):
     def setUp(self):
         self.developer = Developer.objects.create(name="Valve")

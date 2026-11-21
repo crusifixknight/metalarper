@@ -8,7 +8,8 @@
 
 - `backend/` — Django + Django REST Framework: публичное read-only API каталога
   игр (список с фильтрами и пагинацией, деталь по slug, справочники жанров и
-  студий). Контент заводится через Django-админку.
+  студий) и API регистрации пользователей. Контент заводится через
+  Django-админку.
 - `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4:
   каталог с фильтрами, поиском и сортировкой, карточка игры. Запросы к API
   выполняются только на сервере.
@@ -54,10 +55,24 @@ npm run dev
 | Каталог игр | `http://localhost:3000` |
 | Карточка игры | `http://localhost:3000/games/<slug>` |
 | API каталога | `http://127.0.0.1:8000/api/games/` |
+| API регистрации | `POST http://127.0.0.1:8000/api/auth/register/` |
+| API входа | `POST http://127.0.0.1:8000/api/auth/login/` |
+| Обновление токена | `POST http://127.0.0.1:8000/api/auth/refresh/` |
 | Django-админка | `http://127.0.0.1:8000/admin/` |
 | Обложки игр | `http://127.0.0.1:8000/media/games/covers/...` |
 
 Игры, жанры и студии добавляются в админке после `createsuperuser`.
+
+## Аутентификация
+
+- `POST /api/auth/register/` — регистрация: `username`, `email`, `password`,
+  `password_confirm`; возвращает пользователя и JWT-пару `access`/`refresh`.
+- `POST /api/auth/login/` — вход: `username`, `password`; возвращает
+  пользователя и JWT-пару.
+- `POST /api/auth/refresh/` — новый `access` по `refresh`.
+
+Неверные учётные данные дают одинаковый `401` (`invalid_credentials`).
+Logout/blacklist пока не реализованы.
 
 ## Проверки
 

@@ -7,8 +7,9 @@ code so you don't waste time figuring out the structure.
 
 **Metalarper** — a small video game catalog:
 
-- `backend/` — Django + Django REST Framework, a public read-only catalog API;
-  content is managed through the Django admin.
+- `backend/` — Django + Django REST Framework: a public read-only catalog API
+  plus user authentication (registration, login, token refresh); content is
+  managed through the Django admin.
 - `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4.
   Data is fetched from the backend **server-side only**.
 
@@ -109,6 +110,8 @@ cd frontend; npm run build
 Automated tests exist only on the backend (`backend/api/tests.py`): the list is
 public and paginated, detail by slug, unique slug generation, filters by
 genre/developer/year range/search, the `/api/genres/`, `/api/developers/`
+directories, and user authentication (registration validation, duplicates,
+password rules, login errors, issued and refreshed JWTs). There are no frontend
 directories, `age_rating`, Steam snapshot caching / TTL / stale flag, star
 calculation, the `refresh_steam` command, `related_games`, and genre-based
 `recommended_games`. External HTTP is mocked in tests. There are no frontend
@@ -122,6 +125,12 @@ tests.
 | --- | --- |
 | `backend/backend/settings.py` | settings: DRF, JWT, pagination, SQLite, MEDIA |
 | `backend/backend/urls.py` | `/admin/`, `/api/`; media is served only when `DEBUG` |
+| `backend/api/models.py` | `Developer`, `Genre`, `Game` + `unique_slug()` |
+| `backend/api/serializers.py` | `UserSerializer` and `RegisterSerializer` (auth); nested `developer` and `genres`, flat `cover` |
+| `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
+| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"`; `RegisterView` and `LoginView` (public, issue JWTs) |
+| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers`; plus `auth/register/`, `auth/login/`, `auth/refresh/` |
+| `backend/api/admin.py` | registers all three models |
 | `backend/api/models.py` | `Developer`, `Genre`, `Game`, `SteamSnapshot` + `unique_slug()` |
 | `backend/api/serializers.py` | nested `developer`/`genres`, flat `cover`, `steam`, `related_games`, `recommended_games`, `GameBriefSerializer` |
 | `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
@@ -157,6 +166,41 @@ GET /api/games/<slug>/   -> Game
 GET /api/genres/         -> { count, next, previous, results: [Genre] }
 GET /api/developers/     -> { count, next, previous, results: [Developer] }
 ```
+
+Registration (public):
+
+```
+POST /api/auth/register/
+{ "username": "...", "email": "...", "password": "...", "password_confirm": "..." }
+-> 201 { "user": {id, username, email}, "access": "<jwt>", "refresh": "<jwt>" }
+```
+
+- `username` and `email` are unique (checked case-insensitively); `password` is
+  validated by `AUTH_PASSWORD_VALIDATORS` and must match `password_confirm`.
+- Validation errors -> `400` with per-field messages.
+
+Login (public):
+
+```
+POST /api/auth/login/
+{ "username": "...", "password": "..." }
+-> 200 { "user": {id, username, email}, "access": "<jwt>", "refresh": "<jwt>" }
+```
+
+- Wrong password, unknown user and inactive account all return the same
+  `401 {"detail": "Invalid username or password.", "code": "invalid_credentials"}`.
+
+Token refresh (public):
+
+```
+POST /api/auth/refresh/
+{ "refresh": "<jwt>" }
+-> 200 { "access": "<jwt>" }
+```
+
+- Invalid or expired refresh -> `401` with `code: "token_not_valid"`.
+- Refresh rotation is disabled, so the response contains only a new access
+  token; the client keeps the same refresh token until it expires.
 
 Game list filters (`django-filter`, `backend/api/filters.py`):
 
@@ -291,7 +335,17 @@ External Steam data never blocks a catalog request (stale-while-revalidate):
   permissions are `IsAuthenticated`; `GameViewSet` explicitly sets `AllowAny`.
   Any new viewset without explicit `permission_classes` will be closed to
   anonymous users.
-- JWT is installed, but there are no token endpoints in `urls.py`.
+- JWT is installed; registration and login issue access/refresh tokens and
+  `/api/auth/refresh/` renews the access token. Logout/blacklist are not
+  implemented (`token_blacklist` is not installed), so refresh tokens cannot be
+  revoked before they expire.
+- `LoginView` has `authentication_classes = []` and overrides
+  `get_authenticate_header()` so wrong credentials produce `401` instead of
+  DRF's `403` fallback for views without authenticators.
+- `User.email` is not unique at the database level (standard Django `User`):
+  `RegisterSerializer` checks uniqueness case-insensitively, so a race between
+  concurrent requests could still create duplicates. A custom user model would
+  fix this properly.
 - `django-cors-headers` is in the dependencies and middleware, but
   `CORS_ALLOWED_ORIGINS` is not set — it will need configuring if API calls
   move to the client.
