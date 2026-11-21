@@ -112,6 +112,21 @@ async function GameDetails({ params }: GamePageProps) {
           </p>
         )}
       </section>
+
+      <section className="mt-8">
+        <h2 className="mb-3 text-lg font-bold">Похожие игры</h2>
+        {game.recommended_games.length > 0 ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {game.recommended_games.map((recommended) => (
+              <GameMiniCard key={recommended.id} game={recommended} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Похожих игр пока нет.
+          </p>
+        )}
+      </section>
     </>
   );
 }

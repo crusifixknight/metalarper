@@ -72,6 +72,7 @@ export type Game = {
   cover: string | null;
   steam: SteamData | null;
   related_games: GameBrief[];
+  recommended_games: GameBrief[];
 };
 
 export type Paginated<T> = {
