@@ -1,3 +1,4 @@
+import StarRating from "@/components/StarRating";
 import type { Game } from "@/lib/api";
 
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
@@ -25,12 +26,17 @@ function formatNumber(value: number): string {
  * show fewer items instead of empty placeholders.
  */
 export default function GameMeta({ game }: { game: Game }) {
+  const rating = game.steam?.rating_stars;
   const lastUpdated = game.steam?.last_updated;
   const players = game.steam?.current_players;
   const storeUrl = game.steam?.store_url;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-600 dark:text-gray-400">
+      {typeof rating === "number" && (
+        <StarRating rating={rating} votes={game.steam?.rating_votes} />
+      )}
+
       {game.age_rating && (
         <span
           className="rounded border border-gray-300 px-1.5 py-0.5 font-medium text-gray-700 dark:border-gray-600 dark:text-gray-200"
