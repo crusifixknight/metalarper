@@ -11,9 +11,9 @@ type CatalogFiltersProps = {
 };
 
 /**
- * Серверная часть фильтров: читает параметры из URL и загружает справочники
- * жанров и студий. Пока API недоступен, сайдбар показывает пояснение вместо
- * формы.
+ * Server part of the filters: reads parameters from the URL and loads the
+ * genre and developer directories. While the API is unavailable, the sidebar
+ * shows an explanation instead of the form.
  */
 export default async function CatalogFilters({
   searchParams,

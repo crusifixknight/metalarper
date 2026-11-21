@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   images: {
-    // Обложки раздаёт Django из MEDIA_URL; домен берём из API_URL.
+    // Django serves covers from MEDIA_URL; the domain comes from API_URL.
     remotePatterns: [
       {
         protocol: apiUrl.protocol === "https:" ? "https" : "http",
@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
         pathname: "/media/**",
       },
     ],
-    // В dev-окружении бэкенд обычно живёт на localhost/127.0.0.1.
+    // In development the backend usually runs on localhost/127.0.0.1.
     dangerouslyAllowLocalIP: isLocalHostname(apiUrl.hostname),
   },
   turbopack: {

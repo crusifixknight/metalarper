@@ -31,7 +31,7 @@ export default async function CatalogResults({
   let games: Game[];
 
   try {
-    // Фильтры (жанры, студия, диапазон лет) применяет бэкенд.
+    // The backend applies the filters (genres, developer, year range).
     games = await getCatalogGames(filters);
   } catch (error) {
     if (error instanceof ApiError && error.status === 0) {
@@ -108,7 +108,7 @@ export default async function CatalogResults({
     );
   }
 
-  // В API нет параметра ordering, поэтому сортируем сами.
+  // The API has no ordering parameter, so sorting happens here.
   const sorted = sortGames(games, filters.sort);
   const { items, total, totalPages } = paginateGames(sorted, page);
 
@@ -138,7 +138,7 @@ export default async function CatalogResults({
 
   return (
     <>
-      {/* Верхняя панель с информацией и пагинацией */}
+      {/* Summary and pagination bar */}
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
         <span>
           {filtersActive
@@ -184,7 +184,7 @@ export default async function CatalogResults({
         )}
       </div>
 
-      {/* Сетка игр */}
+      {/* Game grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {items.map((game, index) => (
           <GameCard key={game.id} game={game} preload={index === 0} />

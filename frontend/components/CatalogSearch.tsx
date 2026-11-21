@@ -6,11 +6,11 @@ type CatalogSearchProps = {
 };
 
 /**
- * Строка поиска в шапке каталога.
+ * Search box in the catalog header.
  *
- * Поле и кнопка привязаны к форме сайдбара через HTML-атрибут `form`,
- * поэтому поиск применяется вместе с выбранными жанрами, годом и студией.
- * Клиентский JavaScript не нужен.
+ * The input and button are bound to the sidebar form via the HTML `form`
+ * attribute, so search is applied together with the selected genres, year,
+ * and developer. No client-side JavaScript is needed.
  */
 export default async function CatalogSearch({
   searchParams,
@@ -52,7 +52,7 @@ export default async function CatalogSearch({
   );
 }
 
-/** Заглушка строки поиска на время стриминга. */
+/** Search box placeholder while the header is streaming. */
 export function CatalogSearchSkeleton() {
   return (
     <div
