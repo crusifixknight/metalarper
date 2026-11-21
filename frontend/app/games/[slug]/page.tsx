@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import GameMeta from "@/components/GameMeta";
+import GameMiniCard from "@/components/GameMiniCard";
 import { ApiError, getGame, resolveCoverUrl } from "@/lib/api";
 
 type GamePageProps = {
@@ -45,56 +46,73 @@ async function GameDetails({ params }: GamePageProps) {
   const cover = resolveCoverUrl(game.cover);
 
   return (
-    <article className="grid gap-6 md:grid-cols-[260px_1fr]">
-      {/* Обложка */}
-      <div className="relative mx-auto aspect-[2/3] w-full max-w-[260px] overflow-hidden rounded bg-gray-200">
-        {cover ? (
-          <Image
-            src={cover}
-            alt={`Обложка игры ${game.title}`}
-            fill
-            sizes="(max-width: 768px) 100vw, 260px"
-            className="object-cover"
-            preload
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4 text-center text-sm font-medium text-slate-500">
-            {game.title}
-          </div>
-        )}
-      </div>
-
-      {/* Информация */}
-      <div>
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-2xl font-bold">{game.title}</h1>
-          <GameMeta game={game} />
+    <>
+      <article className="grid gap-6 md:grid-cols-[260px_1fr]">
+        {/* Обложка */}
+        <div className="relative mx-auto aspect-[2/3] w-full max-w-[260px] overflow-hidden rounded bg-gray-200">
+          {cover ? (
+            <Image
+              src={cover}
+              alt={`Обложка игры ${game.title}`}
+              fill
+              sizes="(max-width: 768px) 100vw, 260px"
+              className="object-cover"
+              preload
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4 text-center text-sm font-medium text-slate-500">
+              {game.title}
+            </div>
+          )}
         </div>
 
-        <dl className="mb-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-gray-600 dark:text-gray-400">
-          <dt>Год выхода</dt>
-          <dd className="font-medium text-gray-900 dark:text-gray-100">
-            {game.release_year}
-          </dd>
+        {/* Информация */}
+        <div>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-2xl font-bold">{game.title}</h1>
+            <GameMeta game={game} />
+          </div>
 
-          <dt>Студия</dt>
-          <dd className="font-medium text-gray-900 dark:text-gray-100">
-            {game.developer.name}
-          </dd>
+          <dl className="mb-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-gray-600 dark:text-gray-400">
+            <dt>Год выхода</dt>
+            <dd className="font-medium text-gray-900 dark:text-gray-100">
+              {game.release_year}
+            </dd>
 
-          <dt>Жанры</dt>
-          <dd className="font-medium text-gray-900 dark:text-gray-100">
-            {game.genres.length > 0
-              ? game.genres.map((genre) => genre.name).join(", ")
-              : "—"}
-          </dd>
-        </dl>
+            <dt>Студия</dt>
+            <dd className="font-medium text-gray-900 dark:text-gray-100">
+              {game.developer.name}
+            </dd>
 
-        <p className="whitespace-pre-line leading-relaxed text-gray-700 dark:text-gray-300">
-          {game.description || "Описание пока не добавлено."}
-        </p>
-      </div>
-    </article>
+            <dt>Жанры</dt>
+            <dd className="font-medium text-gray-900 dark:text-gray-100">
+              {game.genres.length > 0
+                ? game.genres.map((genre) => genre.name).join(", ")
+                : "—"}
+            </dd>
+          </dl>
+
+          <p className="whitespace-pre-line leading-relaxed text-gray-700 dark:text-gray-300">
+            {game.description || "Описание пока не добавлено."}
+          </p>
+        </div>
+      </article>
+
+      <section className="mt-8">
+        <h2 className="mb-3 text-lg font-bold">Связанные проекты</h2>
+        {game.related_games.length > 0 ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {game.related_games.map((related) => (
+              <GameMiniCard key={related.id} game={related} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Связанных проектов пока нет.
+          </p>
+        )}
+      </section>
+    </>
   );
 }
 

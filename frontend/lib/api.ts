@@ -52,6 +52,14 @@ export type SteamData = {
   is_stale: boolean;
 };
 
+export type GameBrief = {
+  id: number;
+  title: string;
+  slug: string;
+  release_year: number;
+  cover: string | null;
+};
+
 export type Game = {
   id: number;
   title: string;
@@ -63,6 +71,7 @@ export type Game = {
   age_rating: string;
   cover: string | null;
   steam: SteamData | null;
+  related_games: GameBrief[];
 };
 
 export type Paginated<T> = {
