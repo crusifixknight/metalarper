@@ -7,9 +7,15 @@ const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
   timeZone: "UTC",
 });
 
+const numberFormatter = new Intl.NumberFormat("ru-RU");
+
 function formatDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
+}
+
+function formatNumber(value: number): string {
+  return numberFormatter.format(value);
 }
 
 /**
@@ -20,6 +26,7 @@ function formatDate(value: string): string {
  */
 export default function GameMeta({ game }: { game: Game }) {
   const lastUpdated = game.steam?.last_updated;
+  const players = game.steam?.current_players;
   const storeUrl = game.steam?.store_url;
 
   return (
@@ -36,6 +43,12 @@ export default function GameMeta({ game }: { game: Game }) {
       {lastUpdated && (
         <span title="Последнее обновление игры">
           Обновлено {formatDate(lastUpdated)}
+        </span>
+      )}
+
+      {typeof players === "number" && (
+        <span title="Игроков сейчас в Steam">
+          Игроков: {formatNumber(players)}
         </span>
       )}
 
