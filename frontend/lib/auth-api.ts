@@ -126,6 +126,17 @@ export function login(username: string, password: string): Promise<AuthSession> 
   return postJson<AuthSession>("/api/auth/login/", { username, password });
 }
 
+export type RegisterInput = {
+  username: string;
+  email: string;
+  password: string;
+  password_confirm: string;
+};
+
+export function register(input: RegisterInput): Promise<AuthSession> {
+  return postJson<AuthSession>("/api/auth/register/", input);
+}
+
 export function refreshSession(refresh: string): Promise<{ access: string }> {
   return postJson<{ access: string }>("/api/auth/refresh/", { refresh });
 }

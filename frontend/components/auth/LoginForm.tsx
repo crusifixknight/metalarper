@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { loginAction } from "@/app/actions/auth";
 import { EMPTY_AUTH_FORM_STATE } from "@/lib/auth-errors";
@@ -16,13 +16,22 @@ const errorClassName = "mt-1 text-xs text-red-600 dark:text-red-400";
 type LoginFormProps = {
   /** Called after a successful login so the panel can close itself. */
   onSuccess: () => void;
+  /** Switches the panel to the registration form. */
+  onSwitchToRegister: () => void;
 };
 
-export default function LoginForm({ onSuccess }: LoginFormProps) {
+export default function LoginForm({
+  onSuccess,
+  onSwitchToRegister,
+}: LoginFormProps) {
   const [state, formAction, isPending] = useActionState(
     loginAction,
     EMPTY_AUTH_FORM_STATE,
   );
+  // Controlled inputs keep their values when the action returns an error:
+  // React resets uncontrolled forms after every submission.
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     if (state.status === "success") {
@@ -52,6 +61,8 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           autoComplete="username"
           autoFocus
           required
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
           aria-invalid={Boolean(state.fieldErrors.username)}
           aria-describedby={
             state.fieldErrors.username ? "login-username-error" : undefined
@@ -75,6 +86,8 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           type="password"
           autoComplete="current-password"
           required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
           aria-invalid={Boolean(state.fieldErrors.password)}
           aria-describedby={
             state.fieldErrors.password ? "login-password-error" : undefined
@@ -95,6 +108,17 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       >
         {isPending ? "Входим…" : "Войти"}
       </button>
+
+      <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+        Нет аккаунта?{" "}
+        <button
+          type="button"
+          onClick={onSwitchToRegister}
+          className="text-blue-600 hover:underline dark:text-blue-400"
+        >
+          Зарегистрироваться
+        </button>
+      </p>
     </form>
   );
 }

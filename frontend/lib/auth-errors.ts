@@ -46,6 +46,11 @@ const MESSAGE_TRANSLATIONS: ReadonlyArray<readonly [RegExp, string]> = [
     "Пользователь с таким email уже существует.",
   ],
   [/enter a valid email address/i, "Введите корректный email."],
+  [
+    /enter a valid username/i,
+    "Имя пользователя может содержать только буквы, цифры и символы @/./+/-/_.",
+  ],
+  [/passwords do not match/i, "Пароли не совпадают."],
   [/this field is required/i, "Обязательное поле."],
   [/this field may not be blank/i, "Обязательное поле."],
   [
