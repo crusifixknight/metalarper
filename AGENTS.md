@@ -78,6 +78,8 @@ Copy-Item backend/.env.example backend/.env   # fill in a generated SECRET_KEY
 .venv\Scripts\python.exe backend\manage.py migrate
 .venv\Scripts\python.exe backend\manage.py createsuperuser
 .venv\Scripts\python.exe backend\manage.py runserver
+# optional: pre-warm/refresh the Steam cache (players, rating, news date)
+.venv\Scripts\python.exe backend\manage.py refresh_steam
 ```
 
 Without `backend/.env` containing `SECRET_KEY`, the app fails with
@@ -110,6 +112,9 @@ public and paginated, detail by slug, unique slug generation, filters by
 genre/developer/year range/search, the `/api/genres/`, `/api/developers/`
 directories, and user authentication (registration validation, duplicates,
 password rules, login errors, issued and refreshed JWTs). There are no frontend
+directories, `age_rating`, Steam snapshot caching / TTL / stale flag, star
+calculation, the `refresh_steam` command, `related_games`, and genre-based
+`recommended_games`. External HTTP is mocked in tests. There are no frontend
 tests.
 
 ## Code map
@@ -126,6 +131,15 @@ tests.
 | `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"`; `RegisterView` and `LoginView` (public, issue JWTs) |
 | `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers`; plus `auth/register/`, `auth/login/`, `auth/refresh/` |
 | `backend/api/admin.py` | registers all three models |
+| `backend/api/models.py` | `Developer`, `Genre`, `Game`, `SteamSnapshot` + `unique_slug()` |
+| `backend/api/serializers.py` | nested `developer`/`genres`, flat `cover`, `steam`, `related_games`, `recommended_games`, `GameBriefSerializer` |
+| `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
+| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"`; list/retrieve trigger background refresh and recommendations |
+| `backend/api/steam.py` | public Steam fetchers (no API key): current players, review summary, last news date |
+| `backend/api/services.py` | `SteamSnapshot` cache: TTL, stale-while-revalidate, background refresh, genre recommendations |
+| `backend/api/management/commands/refresh_steam.py` | cron/pre-warm command for the Steam cache (`--force`) |
+| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers` |
+| `backend/api/admin.py` | registers all four models; `SteamSnapshot` is read-only |
 
 ### Frontend
 
@@ -196,8 +210,29 @@ GET /api/games/?genres=rpg&genres=action&developer=fromsoftware
 ```
 
 `Game`: `id, title, slug, release_year, developer {id,name,slug},
-genres [{id,name,slug}], description, cover (absolute or relative URL)`.
+genres [{id,name,slug}], description, age_rating, cover (absolute or relative
+URL), steam, related_games, recommended_games`.
 `Genre` and `Developer`: `id, name, slug`.
+`GameBrief` (inside `related_games` / `recommended_games`):
+`id, title, slug, release_year, cover`.
+
+`steam` is `null` when `steam_appid` is not set; otherwise:
+
+```
+steam: {
+  appid, store_url,            // https://store.steampowered.com/app/<appid>/
+  current_players,             // Steam, current players right now
+  rating_stars, rating_votes,  // review summary → 0–5 stars + review count
+  last_updated,                // ISO-8601, date of the latest Steam news item
+  is_stale                     // true while cached data is older than 15 min
+}
+```
+
+- `related_games` — manual M2M ("same universe / story"), ordered by `title`.
+- `recommended_games` — computed from shared genres: up to 4 games, more shared
+  genres first, then by title; the game itself is excluded.
+- Both are present in the list and in the detail response; the list computes
+  them for the current page only.
 
 - Pagination — DRF `PageNumberPagination`, `PAGE_SIZE = 12`; the first-page link
   does not contain `?page=1`.
@@ -209,18 +244,53 @@ genres [{id,name,slug}], description, cover (absolute or relative URL)`.
 - Requests use `cache: "no-store"`, so the catalog always shows fresh data;
   completed responses are cached in process memory for 60 seconds.
 
+## Steam data cache
+
+External Steam data never blocks a catalog request (stale-while-revalidate):
+
+- `SteamSnapshot` (OneToOne to `Game`) stores `current_players`,
+  `rating_stars`, `rating_votes`, `last_updated`, `refreshed_at`.
+- On list/retrieve, `services.ensure_snapshots_async()` checks
+  `refreshed_at` against `STEAM_TTL` (15 min) and starts a daemon thread that
+  refreshes stale snapshots through a `ThreadPoolExecutor`
+  (`MAX_WORKERS = 6`, single-flight per appid).
+- The response is built from the cache immediately: the first request after a
+  cold start returns `null` fields with `is_stale: true`, and the data appears
+  on the next request once the background refresh finishes.
+- If all external calls fail, the snapshot is not overwritten: old values stay
+  and `is_stale` remains `true` (the next request retries in the background).
+- Sources (`backend/api/steam.py`, no API key, 5 s timeout):
+  - players — `ISteamUserStats/GetNumberOfCurrentPlayers`;
+  - rating — `IStoreBrowseService/GetItems` (`summary_filtered`:
+    `percent_positive` → stars, `review_count` → votes), with the classic
+    `store.steampowered.com/appreviews` endpoint as a fallback;
+  - `last_updated` — `ISteamNews/GetNewsForApp/v2`, the latest news date (an
+    approximation of the last patch, not a guaranteed patch date).
+- `manage.py refresh_steam` updates stale snapshots synchronously (use
+  `--force` to refresh everything); it is intended for cron/pre-warming in
+  production.
+
 ## Data model and rules
 
 - `Developer` and `Genre`: `name` (unique) + an auto-generated `slug`.
 - `Game`: `title`, `slug`, `release_year` (≥ 1950, indexed), FK `developer`
   (`on_delete=PROTECT`, `related_name="games"`), M2M `genres` (`blank=True`),
-  `description`, `cover` (`games/covers/`), `created_at`.
+  `description`, `age_rating` (free-form string, e.g. `18+`/`PEGI 16`),
+  `cover` (`games/covers/`), `created_at`, `steam_appid` (unique, nullable),
+  M2M `related_games` (self, non-symmetrical, `related_name="related_to"`).
+- `SteamSnapshot`: OneToOne to `Game` (`related_name="steam_snapshot"`),
+  `current_players`, `rating_stars` (Decimal, 0–5), `rating_votes`,
+  `last_updated`, `refreshed_at` (`auto_now`). Filled only by the background
+  refresh or the `refresh_steam` command; read-only in the admin.
+- `age_rating` is maintained manually: Steam does not expose ESRB/PEGI in the
+  used endpoints.
 - Ordering: games by `title`, developers and genres by `name`.
 - `unique_slug()` (in `models.py`) builds a slug from the name via
   `slugify(..., allow_unicode=True)` and appends `-2`, `-3` on collisions.
   The slug is only generated on first save: renaming does not change it, so game
   URLs stay stable.
-- Migrations: `backend/api/migrations/` (0001 — games/developers, 0002 — genres).
+- Migrations: `backend/api/migrations/` (0001 — games/developers, 0002 — genres,
+  0003 — `age_rating`, `steam_appid`, `related_games`, `SteamSnapshot`).
   After changing models: `manage.py makemigrations api && manage.py migrate`.
 
 ## Conventions
@@ -228,7 +298,13 @@ genres [{id,name,slug}], description, cover (absolute or relative URL)`.
 - Server Components by default; there are no client components except
   `app/error.tsx` (it needs `"use client"` for `reset`).
 - Fetch API data only through helpers from `lib/api.ts`. When changing
-  serializers, update the types there too so the TS contract does not drift.
+  serializers, update the types there too so the TS contract does not drift
+  (the frontend does not consume the new card fields yet — see Pitfalls).
+- External data goes through `backend/api/steam.py` (HTTP) and
+  `backend/api/services.py` (caching/refresh). Do not call Steam from views or
+  serializers: the API must stay fast and independent of the external service.
+- `steam_appid`, `age_rating`, and `related_games` are edited in the Django
+  admin; `SteamSnapshot` is filled automatically and is read-only there.
 - In Next 16 `params` and `searchParams` are `Promise`s and must be awaited
   (see `CatalogResults`, `CatalogFilters`, and `GameDetails`).
 - Catalog filters are a plain GET form; state lives in the URL:
@@ -286,3 +362,29 @@ genres [{id,name,slug}], description, cover (absolute or relative URL)`.
 - `PAGE_SIZE` (12) in the DRF settings and `CATALOG_PAGE_SIZE` in
   `frontend/lib/api.ts` are linked manually: update both when changing the page
   size (the catalog skeleton takes the constant from `lib/api.ts`).
+- The new card fields (`age_rating`, `steam`, `related_games`,
+  `recommended_games`) are API-only for now: `GameCard`, the game page, and the
+  types in `lib/api.ts` do not use them yet. Rendering them is a separate
+  frontend task; until then, do not assume the UI shows Steam data.
+- Steam refresh runs as a daemon thread inside the web process: best-effort and
+  lost on restart. For production reliability use `manage.py refresh_steam` from
+  cron (or a worker); multi-worker deployments share the DB cache, but the
+  in-flight appid set is per process.
+- Steam may throttle: the 15-minute TTL and single-flight per appid are the
+  first line of defense. If throttling appears, raise `STEAM_TTL` or move the
+  refresh to a worker/cron instead of increasing request-time calls.
+- For a cold cache the first response returns `steam` fields as `null` with
+  `is_stale: true`; the data appears on a subsequent request. This is expected,
+  not a bug.
+- The `store.steampowered.com/appreviews` fallback can redirect to the store
+  home page in some networks (bot/geo protection). The primary rating source is
+  `IStoreBrowseService/GetItems`; if Steam changes endpoints, fix only
+  `backend/api/steam.py`.
+- `last_updated` is the date of the latest Steam news item, not a guaranteed
+  patch date, and may be `null` for games without news.
+- Recommendations scan every game that shares at least one genre and intersect
+  genres in Python: fine for a small catalog, but revisit (SQL limits, cache)
+  if the catalog grows large.
+- With SQLite, a background refresh write can rarely collide with a request
+  ("database is locked"); writes are short, but a real deployment should use
+  PostgreSQL or a separate refresh worker.

@@ -5,16 +5,16 @@ from .models import Developer, Game, Genre
 
 
 class GameFilter(django_filters.FilterSet):
-    """Фильтры каталога игр.
+    """Game catalog filters.
 
-    Параметры:
-      ?genres=<slug>       — мультивыбор, «ИЛИ» внутри группы
-      ?developer=<slug>    — мультивыбор, «ИЛИ» внутри группы
-      ?year_from=YYYY      — release_year >= YYYY
-      ?year_to=YYYY        — release_year <= YYYY
-      ?search=<строка>     — поиск по title (icontains)
+    Parameters:
+      ?genres=<slug>       - multi-select, "OR" within the group
+      ?developer=<slug>    - multi-select, "OR" within the group
+      ?year_from=YYYY      - release_year >= YYYY
+      ?year_to=YYYY        - release_year <= YYYY
+      ?search=<string>     - search by title (icontains)
 
-    Логика между группами — «И» (стандартное поведение FilterSet).
+    Logic between groups is "AND" (the standard FilterSet behavior).
     """
 
     genres = django_filters.ModelMultipleChoiceFilter(
@@ -42,16 +42,16 @@ class GameFilter(django_filters.FilterSet):
         fields = ("genres", "developer", "year_from", "year_to", "search")
 
     def filter_search(self, queryset, name, value):
-        """Регистронезависимый поиск по названию.
+        """Case-insensitive search by title.
 
-        На SQLite стандартный icontains не выполняет Unicode case folding,
-        поэтому для кириллицы используем Q с iexact/icontains там, где это
-        возможно, а также Lower-нормализацию на стороне Python недоступна
-        в queryset. Ниже — практичный вариант: icontains + fallback через
-        contains по lower().
+        On SQLite the standard icontains does not perform Unicode case folding,
+        so for Cyrillic we use Q with iexact/icontains where possible, and
+        Python-side lower() normalization is not available in a queryset.
+        Below is the practical option: icontains plus a fallback through
+        contains on the lowercased value.
 
-        Фактически на SQLite для не-ASCII строк icontains может работать
-        регистрозависимо; это ограничение БД, а не фильтра.
+        In practice, on SQLite icontains may be case-sensitive for non-ASCII
+        strings; this is a database limitation, not a filter one.
         """
         if not value:
             return queryset
