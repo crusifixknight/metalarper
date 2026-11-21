@@ -10,8 +10,10 @@ code so you don't waste time figuring out the structure.
 - `backend/` — Django + Django REST Framework: a public read-only catalog API
   plus user authentication (registration, login, token refresh); content is
   managed through the Django admin.
-- `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4.
-  Data is fetched from the backend **server-side only**.
+- `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4:
+  the catalog with filters/search/sorting, a header auth panel
+  (login/registration), and game pages with Steam metadata plus related and
+  recommended games. Data is fetched from the backend **server-side only**.
 
 UI text in Russian, code comments - English. Frontend docs — `frontend/README.md`.
 
@@ -107,15 +109,15 @@ cd frontend; npm run lint
 cd frontend; npm run build
 ```
 
-Automated tests exist only on the backend (`backend/api/tests.py`): the list is
-public and paginated, detail by slug, unique slug generation, filters by
-genre/developer/year range/search, the `/api/genres/`, `/api/developers/`
-directories, and user authentication (registration validation, duplicates,
-password rules, login errors, issued and refreshed JWTs). There are no frontend
-directories, `age_rating`, Steam snapshot caching / TTL / stale flag, star
-calculation, the `refresh_steam` command, `related_games`, and genre-based
-`recommended_games`. External HTTP is mocked in tests. There are no frontend
-tests.
+Automated tests exist only on the backend (`backend/api/tests.py`, 47 tests):
+the list is public and paginated, detail by slug, `age_rating` is returned,
+unique slug generation; filters by genre/developer/year range/search, including
+`400` on an unknown slug or non-numeric year, and the `/api/genres/`,
+`/api/developers/` directories; user authentication (registration validation,
+duplicates, password rules, login errors, issued and refreshed JWTs); Steam
+snapshot caching with the TTL/stale flag, star calculation, and the
+`refresh_steam` command; `related_games` and genre-based `recommended_games`.
+External HTTP is mocked in tests. There are no frontend tests.
 
 ## Code map
 
@@ -123,37 +125,44 @@ tests.
 
 | File | Purpose |
 | --- | --- |
-| `backend/backend/settings.py` | settings: DRF, JWT, pagination, SQLite, MEDIA |
+| `backend/backend/settings.py` | settings: DRF, JWT (30 min access / 1 day refresh), pagination, SQLite, MEDIA, password validators |
 | `backend/backend/urls.py` | `/admin/`, `/api/`; media is served only when `DEBUG` |
-| `backend/api/models.py` | `Developer`, `Genre`, `Game` + `unique_slug()` |
-| `backend/api/serializers.py` | `UserSerializer` and `RegisterSerializer` (auth); nested `developer` and `genres`, flat `cover` |
-| `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
-| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"`; `RegisterView` and `LoginView` (public, issue JWTs) |
-| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers`; plus `auth/register/`, `auth/login/`, `auth/refresh/` |
-| `backend/api/admin.py` | registers all three models |
 | `backend/api/models.py` | `Developer`, `Genre`, `Game`, `SteamSnapshot` + `unique_slug()` |
-| `backend/api/serializers.py` | nested `developer`/`genres`, flat `cover`, `steam`, `related_games`, `recommended_games`, `GameBriefSerializer` |
+| `backend/api/serializers.py` | auth serializers (`UserSerializer`, `RegisterSerializer`, `LoginSerializer`); nested `developer`/`genres`, flat `cover`, `steam`, `related_games`, `recommended_games`, `GameBriefSerializer` |
 | `backend/api/filters.py` | `GameFilter`: `genres`, `developer`, `year_from`, `year_to`, `search` |
-| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet`, `AllowAny`, `lookup_field = "slug"`; list/retrieve trigger background refresh and recommendations |
+| `backend/api/views.py` | `GameViewSet` + `GenreViewSet` + `DeveloperViewSet` (`AllowAny`, `lookup_field = "slug"`); `RegisterView` and `LoginView` (public, issue JWTs); list/retrieve trigger background refresh and recommendations |
 | `backend/api/steam.py` | public Steam fetchers (no API key): current players, review summary, last news date |
 | `backend/api/services.py` | `SteamSnapshot` cache: TTL, stale-while-revalidate, background refresh, genre recommendations |
 | `backend/api/management/commands/refresh_steam.py` | cron/pre-warm command for the Steam cache (`--force`) |
-| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers` |
+| `backend/api/urls.py` | DRF `DefaultRouter`: `games`, `genres`, `developers`; plus `auth/register/`, `auth/login/`, `auth/refresh/` |
 | `backend/api/admin.py` | registers all four models; `SteamSnapshot` is read-only |
 
 ### Frontend
 
 | File | Purpose |
 | --- | --- |
-| `frontend/lib/api.ts` | types, `ApiError`, `API_URL`, `getGames`, `getCatalogGames`, `getGame`, `getFacets`, filter parsing, sorting, pagination, `resolveCoverUrl` |
+| `frontend/lib/api.ts` | catalog types, `ApiError`, `API_URL`, `getGames`, `getCatalogGames`, `getGame`, `getFacets`, filter parsing, sorting, pagination, `resolveCoverUrl`; includes `SteamData`/`GameBrief` and the related/recommended fields |
+| `frontend/lib/auth-api.ts` | server-side client for `/api/auth/*`: `login`, `register`, `refreshSession`, `AuthApiError` with per-field errors |
+| `frontend/lib/auth-errors.ts` | maps API/DRF errors to Russian messages and builds `AuthFormState` for `useActionState` |
+| `frontend/lib/session.ts` | HttpOnly cookies `ml_access`/`ml_refresh`/`ml_user`: set, clear, and read the current user |
+| `frontend/app/actions/auth.ts` | Server Actions `loginAction`, `registerAction`, `logoutAction`; revalidate the root layout |
+| `frontend/proxy.ts` | Next 16 proxy: refreshes the access token before rendering and clears the session when the refresh token is rejected |
+| `frontend/app/layout.tsx` | root layout: header with the logo and `AuthStatus` inside `<Suspense>` |
 | `frontend/app/page.tsx` | static catalog shell: the «Каталог игр» heading + search box on the right; results, search, and sidebar stream inside separate `<Suspense>` boundaries |
 | `frontend/components/CatalogFilters.tsx` | server-side filters: `searchParams` + genre/developer directories |
 | `frontend/components/FilterSidebar.tsx` | GET filter form (`genres`, `year_from`/`year_to`, `developer`, `sort`), `FILTER_FORM_ID` for the search box, and a skeleton |
 | `frontend/components/CatalogSearch.tsx` | search box in the header: input and magnifier button are bound to the filter form (`form={FILTER_FORM_ID}`), plus a skeleton |
 | `frontend/components/CatalogResults.tsx` | filtered request, sorting, pagination, "empty" / "no such page" / "invalid filter" / "API unavailable" states |
-| `frontend/components/GameCard.tsx` | game card (`next/image`, genres, year, developer) |
+| `frontend/components/GameCard.tsx` | catalog grid card (`next/image`, title, genres, year, developer) |
+| `frontend/components/GameMeta.tsx` | compact game metadata: stars, age rating, last update, current players, Steam link |
+| `frontend/components/StarRating.tsx` | five-star fractional rating with an accessible label |
+| `frontend/components/GameMiniCard.tsx` | compact card for related and recommended games |
 | `frontend/components/CatalogSkeleton.tsx` | catalog skeleton with `CATALOG_PAGE_SIZE` cards |
-| `frontend/app/games/[slug]/page.tsx` | game detail page; `ApiError(404)` → `notFound()` |
+| `frontend/components/auth/AuthStatus.tsx` | server part of the header: reads the session cookie, renders the user and logout, or `AuthMenu` |
+| `frontend/components/auth/AuthMenu.tsx` | client popover with the «Войти» button that switches between login and registration |
+| `frontend/components/auth/LoginForm.tsx` | client login form (`useActionState` + `loginAction`) |
+| `frontend/components/auth/RegisterForm.tsx` | client registration form (`useActionState` + `registerAction`) |
+| `frontend/app/games/[slug]/page.tsx` | game detail page: cover, `GameMeta`, description, related and recommended sections; `ApiError(404)` → `notFound()` |
 | `frontend/app/error.tsx` | client error boundary |
 | `frontend/app/not-found.tsx` | 404 page |
 | `frontend/next.config.ts` | `cacheComponents`, `partialPrefetching`, `images.remotePatterns` derived from `API_URL` |
@@ -295,11 +304,17 @@ External Steam data never blocks a catalog request (stale-while-revalidate):
 
 ## Conventions
 
-- Server Components by default; there are no client components except
-  `app/error.tsx` (it needs `"use client"` for `reset`).
-- Fetch API data only through helpers from `lib/api.ts`. When changing
-  serializers, update the types there too so the TS contract does not drift
-  (the frontend does not consume the new card fields yet — see Pitfalls).
+- Server Components by default. Client components are limited to `app/error.tsx`
+  (needs `"use client"` for `reset`) and the auth UI: `AuthMenu`, `LoginForm`,
+  `RegisterForm`.
+- Fetch catalog data only through helpers from `lib/api.ts`; auth calls go
+  through `lib/auth-api.ts`. When changing serializers, update the types in
+  `lib/api.ts` too so the TS contract does not drift.
+- The JWT session lives in HttpOnly cookies (`ml_access`, `ml_refresh`,
+  `ml_user`): tokens never reach browser JavaScript or `localStorage`. Server
+  Actions in `app/actions/auth.ts` set and clear them; `proxy.ts` refreshes the
+  access token before rendering when it is missing or about to expire, and
+  clears the session if the backend rejects the refresh token.
 - External data goes through `backend/api/steam.py` (HTTP) and
   `backend/api/services.py` (caching/refresh). Do not call Steam from views or
   serializers: the API must stay fast and independent of the external service.
@@ -362,10 +377,10 @@ External Steam data never blocks a catalog request (stale-while-revalidate):
 - `PAGE_SIZE` (12) in the DRF settings and `CATALOG_PAGE_SIZE` in
   `frontend/lib/api.ts` are linked manually: update both when changing the page
   size (the catalog skeleton takes the constant from `lib/api.ts`).
-- The new card fields (`age_rating`, `steam`, `related_games`,
-  `recommended_games`) are API-only for now: `GameCard`, the game page, and the
-  types in `lib/api.ts` do not use them yet. Rendering them is a separate
-  frontend task; until then, do not assume the UI shows Steam data.
+- `GameCard` (the catalog grid) deliberately shows only title, genres, year,
+  and developer. Steam data, `age_rating`, related and recommended games are
+  rendered on the game page (`GameMeta`, `StarRating`, `GameMiniCard`), so do not
+  assume the grid shows Steam metadata.
 - Steam refresh runs as a daemon thread inside the web process: best-effort and
   lost on restart. For production reliability use `manage.py refresh_steam` from
   cron (or a worker); multi-worker deployments share the DB cache, but the

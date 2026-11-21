@@ -8,11 +8,13 @@
 
 - `backend/` — Django + Django REST Framework: публичное read-only API каталога
   игр (список с фильтрами и пагинацией, деталь по slug, справочники жанров и
-  студий) и API регистрации пользователей. Контент заводится через
+  студий, Steam-данные на карточке), API аутентификации (регистрация, вход,
+  обновление токена) и кэш Steam-данных. Контент заводится через
   Django-админку.
 - `frontend/` — Next.js 16 (App Router, Server Components) + Tailwind CSS 4:
-  каталог с фильтрами, поиском и сортировкой, карточка игры. Запросы к API
-  выполняются только на сервере.
+  каталог с фильтрами, поиском и сортировкой, панель входа и регистрации в
+  шапке, страница игры с рейтингом, возрастом, связанными и похожими играми.
+  Запросы к API выполняются только на сервере.
 
 ## Требования
 
@@ -28,9 +30,13 @@
 Copy-Item backend/.env.example backend/.env
 # откройте backend/.env и задайте SECRET_KEY
 
+.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 .venv\Scripts\python.exe backend\manage.py migrate
 .venv\Scripts\python.exe backend\manage.py createsuperuser
 .venv\Scripts\python.exe backend\manage.py runserver
+
+# опционально: заранее заполнить кэш Steam (игроки, рейтинг, дата новости)
+.venv\Scripts\python.exe backend\manage.py refresh_steam
 ```
 
 Без `SECRET_KEY` в `backend/.env` приложение не запустится
@@ -61,7 +67,9 @@ npm run dev
 | Django-админка | `http://127.0.0.1:8000/admin/` |
 | Обложки игр | `http://127.0.0.1:8000/media/games/covers/...` |
 
-Игры, жанры и студии добавляются в админке после `createsuperuser`.
+В админке после `createsuperuser` добавляются игры, жанры и студии, а также
+возрастной рейтинг, Steam AppID и связанные игры. Кэш `SteamSnapshot`
+заполняется автоматически и доступен только для чтения.
 
 ## Аутентификация
 
@@ -73,6 +81,25 @@ npm run dev
 
 Неверные учётные данные дают одинаковый `401` (`invalid_credentials`).
 Logout/blacklist пока не реализованы.
+
+В интерфейсе вход и регистрация открываются из панели в шапке сайта. Токены
+хранятся в HttpOnly cookies (`ml_access`, `ml_refresh`) и не попадают в
+браузерный JavaScript: access живёт 30 минут, refresh — 1 день, продление
+выполняет `frontend/proxy.ts` до отрисовки страницы.
+
+## Steam-данные
+
+Если у игры заполнен `steam_appid`, карточка получает текущее число игроков,
+рейтинг по отзывам (0–5 звёзд) и дату последней новости. API никогда не ждёт
+Steam: данные отдаются из кэша `SteamSnapshot` и обновляются в фоне раз в
+15 минут.
+
+- При холодном кэше поля `steam` приходят как `null` с `is_stale: true` —
+  данные появятся после фонового обновления, это нормальное поведение.
+- Ручное обновление: `manage.py refresh_steam` (флаг `--force` обновляет все
+  снимки, даже свежие).
+- Возрастной рейтинг (`age_rating`) Steam не отдаёт — он вводится в админке
+  вручную.
 
 ## Проверки
 
