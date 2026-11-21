@@ -1,5 +1,17 @@
 import type { Game } from "@/lib/api";
 
+const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
+}
+
 /**
  * Compact metadata shown to the right of the game title.
  *
@@ -7,6 +19,7 @@ import type { Game } from "@/lib/api";
  * show fewer items instead of empty placeholders.
  */
 export default function GameMeta({ game }: { game: Game }) {
+  const lastUpdated = game.steam?.last_updated;
   const storeUrl = game.steam?.store_url;
 
   return (
@@ -17,6 +30,12 @@ export default function GameMeta({ game }: { game: Game }) {
           title="Возрастной рейтинг"
         >
           {game.age_rating}
+        </span>
+      )}
+
+      {lastUpdated && (
+        <span title="Последнее обновление игры">
+          Обновлено {formatDate(lastUpdated)}
         </span>
       )}
 
